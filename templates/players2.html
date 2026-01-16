@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Spieler verwalten</title>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1/css/pico.min.css" />
+  <style>
+    .tabs {
+      display: flex;
+      gap: 0.5rem;
+    }
+
+    .tabs a {
+      text-decoration: none;
+      padding: 0.4rem 0.75rem;
+      border-radius: 6px;
+    }
+
+    .tabs a.active {
+      background-color: var(--primary);
+      color: white !important;
+    }
+
+    table {
+      width: 100%;
+      margin-bottom: 2rem;
+    }
+
+    td, th {
+      text-align: left;
+      vertical-align: middle;
+    }
+
+    .remove-btn {
+      background-color: var(--secondary);
+      border: none;
+      border-radius: 6px;
+      padding: 0.35rem 0.6rem;
+      font-size: 1rem;
+      cursor: pointer;
+      transition: background-color 0.2s ease;
+    }
+
+    .remove-btn:hover {
+      background-color: var(--primary-hover);
+    }
+
+    /* Add-form mit 80/5/15 Aufteilung, responsive und höhengleich */
+    .add-form {
+      display: grid;
+      grid-template-columns: 80% 5% 15%;
+      align-items: stretch;
+      width: 100%;
+      margin-top: 2rem;
+      gap: 0; /* Abstand wird über mittlere Spalte erzeugt */
+    }
+
+    .add-form input[type="text"] {
+      width: 100%;
+      font-size: 1rem;
+      padding: 0.6rem;
+    }
+
+    .add-form .spacer {
+      /* Leeres Grid-Element als Abstand (5%) */
+    }
+
+    .add-form button {
+      width: 100%;
+      font-size: 1.2rem;
+      padding: 0.6rem;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+  </style>
+</head>
+<body>
+  <nav class="container-fluid">
+    <ul>
+      <li><strong>Kicker App</strong></li>
+    </ul>
+    <ul class="tabs">
+      <li><a href="/">Eintragen</a></li>
+      <li><a href="/overview">Übersicht</a></li>
+      <li><a href="/players" class="active" >Spieler</a></li>
+      <li><a href="/statistics">Statistik</a></li>
+    </ul>
+  </nav>
+
+  <main class="container">
+    <h2>Spieler verwalten</h2>
+
+    <table>
+      <tbody>
+        {% for player in players %}
+        <tr>
+          <td>{{ player.name }}</td>
+          <td style="text-align: right;">
+            <form method="POST" action="/delete_player" style="display:inline">
+              <input type="hidden" name="player_id" value="{{ player.id }}">
+              <button type="button" class="remove-btn" onclick="confirmRemove(this)">−</button>
+            </form>
+          </td>
+        </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <form method="POST" action="/add_player" class="add-form">
+      <input type="text" name="name" placeholder="Neuer Spieler" required />
+      <div class="spacer"></div>
+      <button type="submit" class="contrast">+</button>
+    </form>
+  </main>
+
+  <script>
+    function confirmRemove(button) {
+      if (button.dataset.confirmed === "true") {
+        button.closest("form").submit();
+      } else {
+        button.dataset.confirmed = "true";
+        button.textContent = "🗑️";
+        setTimeout(() => {
+          button.dataset.confirmed = "false";
+          button.textContent = "−";
+        }, 2000);
+      }
+    }
+  </script>
+</body>
+</html>

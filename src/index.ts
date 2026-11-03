@@ -2,12 +2,15 @@ import { Hono } from "hono";
 import { STARTING_ELO, recalculateAllElo } from "./elo";
 import { ensureMigrated } from "./migrate";
 import { type Env, formatDateTime, formatDayMonth, nowTimestamp, parseTimestamp, pyRound } from "./util";
+import { errorPage, flash } from "./views/layout";
 import {
   type AdminGame,
+  type Player,
+  type PlayerRow,
   type ChartData,
   type EditGame,
   type OverviewGame,
-  type Player,
+
   type PlayerStats,
   type RankedPlayer,
   adminGamesPage,
@@ -19,6 +22,7 @@ import {
 } from "./views/pages";
 
 const app = new Hono<{ Bindings: Env }>();
+const GROUPS_PER_PAGE = 30;
 
 // Datenbank beim ersten Request automatisch einrichten (Schema + Daten-Import)
 app.use("*", async (c, next) => {
@@ -35,9 +39,21 @@ app.get("/", async (c) => {
   return c.html(indexPage(results));
 });
 
+const PLAYER_MESSAGES: Record<string, () => string> = {
+  added: () => flash("success", "Spieler hinzugefügt."),
+  deleted: () => flash("success", "Spieler gelöscht."),
+  duplicate: () => flash("error", "Diesen Namen gibt es schon."),
+  hasgames: () => flash("error", "Spieler mit eingetragenen Spielen können nicht gelöscht werden."),
+};
+
 app.get("/players", async (c) => {
-  const { results } = await c.env.DB.prepare("SELECT id, name FROM players ORDER BY name").all<Player>();
-  return c.html(playersPage(results));
+  const { results } = await c.env.DB.prepare(
+    `SELECT p.id, p.name, p.elo, COUNT(gp.id) AS games
+     FROM players p LEFT JOIN game_players gp ON gp.player_id = p.id
+     GROUP BY p.id ORDER BY p.name COLLATE NOCASE`
+  ).all<PlayerRow>();
+  const msg = PLAYER_MESSAGES[c.req.query("msg") ?? ""]?.() ?? "";
+  return c.html(playersPage(results, msg));
 });
 
 app.get("/overview", async (c) => {
@@ -86,11 +102,26 @@ app.get("/overview", async (c) => {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key)!.push(game);
   }
+  // Innerhalb einer Gruppe: Spiel 1 zuerst
+  for (const g of groups.values()) g.sort((a, b) => a.id - b.id);
   const sorted = [...groups.values()].sort((a, b) =>
     a[0].time_played < b[0].time_played ? 1 : a[0].time_played > b[0].time_played ? -1 : 0
   );
 
-  return c.html(overviewPage(sorted));
+  const page = Math.max(1, parseInt(c.req.query("page") ?? "1", 10) || 1);
+  const pageGroups = sorted.slice((page - 1) * GROUPS_PER_PAGE, page * GROUPS_PER_PAGE);
+  const newGroupId = c.req.query("neu");
+  const saved = parseInt(c.req.query("saved") ?? "", 10);
+  const message =
+    newGroupId && saved > 0
+      ? flash("success", saved === 1 ? "1 Spiel gespeichert." : `${saved} Spiele gespeichert.`)
+      : c.req.query("edited")
+        ? flash("success", "Änderungen gespeichert.")
+        : "";
+
+  return c.html(
+    overviewPage(pageGroups, { page, hasMore: sorted.length > page * GROUPS_PER_PAGE, newGroupId, message })
+  );
 });
 
 app.get("/statistics", async (c) => {
@@ -197,8 +228,9 @@ app.get("/statistics", async (c) => {
     }
     for (const entry of chartMap.values()) entry.history.push(pyRound(entry.current));
   }
+  const gamesByName = new Map(stats.map((s) => [s.name, s.games_played]));
   for (const [pid, entry] of chartMap) {
-    chart.datasets.push({ label: entry.name, data: entry.history, playerId: pid });
+    chart.datasets.push({ label: entry.name, data: entry.history, playerId: pid, games: gamesByName.get(entry.name) ?? 0 });
   }
 
   return c.html(statisticsPage(ranked, stats, new Set(latestChanges.keys()), chart));
@@ -223,15 +255,15 @@ app.post("/submit", async (c) => {
     const raw = form.get(field);
     if (typeof raw === "string" && raw !== "") {
       const id = parseInt(raw, 10);
-      if (!Number.isInteger(id)) return c.text("Fehler: Ungültige Spieler-ID.", 400);
+      if (!Number.isInteger(id)) return c.html(errorPage("Ungültige Spieler-ID."), 400);
       playerList.push({ id, side });
     }
   }
   if (!playerList.some((p) => p.side === "red") || !playerList.some((p) => p.side === "blue")) {
-    return c.text("Fehler: Es muss mindestens ein Spieler pro Team ausgewählt werden.", 400);
+    return c.html(errorPage("Es muss mindestens ein Spieler pro Team ausgewählt werden."), 400);
   }
   if (new Set(playerList.map((p) => p.id)).size !== playerList.length) {
-    return c.text("Fehler: Ein Spieler wurde mehrfach ausgewählt.", 400);
+    return c.html(errorPage("Ein Spieler wurde mehrfach ausgewählt."), 400);
   }
 
   const groupId = crypto.randomUUID();
@@ -241,8 +273,8 @@ app.post("/submit", async (c) => {
   for (let i = 0; form.has(`games[${i}][score1]`); i++) {
     const score1 = parseInt(String(form.get(`games[${i}][score1]`)), 10);
     const score2 = parseInt(String(form.get(`games[${i}][score2]`)), 10);
-    if (!Number.isInteger(score1) || !Number.isInteger(score2) || score1 < 0 || score2 < 0) {
-      return c.text(`Fehler: Ungültiger Spielstand in Spiel ${i + 1}.`, 400);
+    if (!Number.isInteger(score1) || !Number.isInteger(score2) || score1 < 0 || score2 < 0 || score1 > 99 || score2 > 99) {
+      return c.html(errorPage(`Ungültiger Spielstand in Spiel ${i + 1}.`), 400);
     }
     const swapped = (form.get(`games[${i}][swapped]`) ?? "0") === "1";
     const redScore = swapped ? score2 : score1;
@@ -268,39 +300,41 @@ app.post("/submit", async (c) => {
     }
   }
 
-  if (statements.length === 0) return c.text("Fehler: Keine Spiele übermittelt.", 400);
+  if (statements.length === 0) return c.html(errorPage("Keine Spiele übermittelt."), 400);
 
   try {
     await db.batch(statements); // atomar: alles oder nichts
     await recalculateAllElo(db);
   } catch (e) {
-    return c.text(`Ein unerwarteter Fehler ist aufgetreten: ${(e as Error).message}`, 500);
+    return c.html(errorPage(`Beim Speichern ist ein Fehler aufgetreten: ${(e as Error).message}`), 500);
   }
-  return c.redirect("/");
+  return c.redirect(`/overview?neu=${groupId}&saved=${statements.length / (1 + playerList.length)}`, 303);
 });
 
 app.post("/add_player", async (c) => {
   const form = await c.req.formData();
-  const name = String(form.get("name") ?? "").trim();
-  if (name) {
-    // INSERT OR IGNORE: doppelte Namen werden still ignoriert (wie vorher)
-    await c.env.DB.prepare("INSERT OR IGNORE INTO players (name, elo) VALUES (?, ?)").bind(name, STARTING_ELO).run();
-  }
-  return c.redirect("/players");
+  const name = String(form.get("name") ?? "").replace(/\s+/g, " ").trim().slice(0, 30);
+  if (!name) return c.redirect("/players", 303);
+  const existing = await c.env.DB.prepare("SELECT 1 FROM players WHERE lower(name) = lower(?)").bind(name).first();
+  if (existing) return c.redirect("/players?msg=duplicate", 303);
+  await c.env.DB.prepare("INSERT INTO players (name, elo) VALUES (?, ?)").bind(name, STARTING_ELO).run();
+  return c.redirect("/players?msg=added", 303);
 });
 
 app.post("/delete_player", async (c) => {
   const form = await c.req.formData();
   const id = parseInt(String(form.get("player_id") ?? ""), 10);
-  if (Number.isInteger(id)) {
-    await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(id).run();
-    await recalculateAllElo(c.env.DB);
-  }
-  return c.redirect("/players");
+  if (!Number.isInteger(id)) return c.redirect("/players", 303);
+  // Nur Spieler ohne Spiele löschen – sonst würden durch ON DELETE CASCADE Spiele kaputtgehen.
+  const used = await c.env.DB.prepare("SELECT 1 FROM game_players WHERE player_id = ? LIMIT 1").bind(id).first();
+  if (used) return c.redirect("/players?msg=hasgames", 303);
+  await c.env.DB.prepare("DELETE FROM players WHERE id = ?").bind(id).run();
+  return c.redirect("/players?msg=deleted", 303);
 });
 
 app.on(["GET", "POST"], "/admin/games", async (c) => {
   const db = c.env.DB;
+  let message = "";
   if (c.req.method === "POST") {
     const form = await c.req.formData();
     const ids = form
@@ -311,8 +345,9 @@ app.on(["GET", "POST"], "/admin/games", async (c) => {
       try {
         await db.batch(ids.map((id) => db.prepare("DELETE FROM games WHERE id = ?").bind(id)));
         await recalculateAllElo(db);
+        message = flash("success", ids.length === 1 ? "1 Spiel gelöscht." : `${ids.length} Spiele gelöscht.`);
       } catch (e) {
-        return c.text(`Fehler beim Löschen der Spiele: ${(e as Error).message}`, 500);
+        return c.html(errorPage(`Fehler beim Löschen der Spiele: ${(e as Error).message}`, "/admin/games"), 500);
       }
     }
   }
@@ -325,10 +360,10 @@ app.on(["GET", "POST"], "/admin/games", async (c) => {
        LEFT JOIN game_players gp ON g.id = gp.game_id
        LEFT JOIN players p ON gp.player_id = p.id
        GROUP BY g.id
-       ORDER BY played_at DESC`
+       ORDER BY played_at DESC, g.id DESC`
     )
     .all<AdminGame>();
-  return c.html(adminGamesPage(results, formatDateTime));
+  return c.html(adminGamesPage(results, formatDateTime, message));
 });
 
 // ---------------------------------------------------------------------------
@@ -430,11 +465,12 @@ app.post("/api/group/:groupId", async (c) => {
   return c.json({ success: true });
 });
 
-app.notFound((c) => c.text("Seite nicht gefunden.", 404));
+app.notFound((c) => c.html(errorPage("Diese Seite gibt es nicht."), 404));
 
 app.onError((err, c) => {
   console.error(err);
-  return c.text(`Ein unerwarteter Fehler ist aufgetreten: ${err.message}`, 500);
+  if (c.req.path.startsWith("/api/")) return c.text(err.message, 500);
+  return c.html(errorPage(`Ein unerwarteter Fehler ist aufgetreten: ${err.message}`), 500);
 });
 
 export default app;

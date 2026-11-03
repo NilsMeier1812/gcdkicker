@@ -1,175 +1,160 @@
-const selects = document.querySelectorAll('.player-select');
+(() => {
+  const form = document.getElementById('entry-form');
+  const gamesEl = document.getElementById('games');
+  const selects = Array.from(form.querySelectorAll('.player-select'));
+  const errorEl = document.getElementById('form-error');
+  const submitBtn = document.getElementById('submit-btn');
+  const sel = (name) => form.querySelector(`select[name="${name}"]`);
 
-selects.forEach(select => {
-  select.addEventListener("change", updateDisabledOptions);
-});
+  const SWAP_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M7 4 3 8l4 4"/><path d="M3 8h14"/><path d="m17 20 4-4-4-4"/><path d="M21 16H7"/></svg>';
+  const MINUS_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" aria-hidden="true"><path d="M5 12h14"/></svg>';
+  const TRASH_ICON = '<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 6h18M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2m3 0v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/></svg>';
 
-function updateDisabledOptions() {
-  const selected = Array.from(selects).map(s => s.value);
-  selects.forEach(select => {
-    Array.from(select.options).forEach(opt => {
-      opt.disabled = selected.includes(opt.value) && opt.value !== select.value;
-    });
-  });
-}
+  let gameCount = 0;
 
-let gameCount = 0;
-
-function addGameRow() {
-  const games = document.getElementById("games");
-  const container = document.createElement("div");
-  container.className = "score-row";
-  container.dataset.index = gameCount;
-
-  const swapped = gameCount % 2 === 1;
-  if (swapped) container.classList.add("swapped");
-
-  container.innerHTML = `
-    <button type="button" class="swap-btn" onclick="swapSides(this)" title="Seiten tauschen">🔁</button>
-    <input type="number" min="0" name="games[${gameCount}][score1]" required>
-    <span class="separator">:</span>
-    <input type="number" min="0" name="games[${gameCount}][score2]" required>
-    <button type="button" class="remove-btn invisible" onclick="removeGameRow(this)" title="Spiel entfernen">−</button>
-    <input type="hidden" name="games[${gameCount}][swapped]" value="${swapped ? 1 : 0}">
-  `;
-
-  games.appendChild(container);
-  gameCount++;
-  updateRemovability();
-}
-
-
-
-function swapSides(button) {
-  const row = button.closest(".score-row");
-  row.classList.toggle("swapped");
-  const hidden = row.querySelector("input[type=hidden]");
-  hidden.value = hidden.value === "1" ? "0" : "1";
-}
-
-function removeGameRow(button) {
-  const row = button.closest(".score-row");
-
-  if (button.dataset.confirmed === "true") {
-    row.remove();
+  // --- Spielzeilen -----------------------------------------------------------
+  function addGameRow(focus) {
+    const index = gameCount++;
+    const rowNumber = gamesEl.children.length + 1;
+    // Beim Kickern wird nach jedem Spiel die Seite gewechselt -> abwechselnd vorbelegen
+    const swapped = gamesEl.children.length % 2 === 1;
+    const row = document.createElement('div');
+    row.className = 'score-row score-grid' + (swapped ? ' swapped' : '');
+    row.innerHTML = `
+      <button type="button" class="icon-btn swap-btn" title="Seiten tauschen" aria-label="Spiel ${rowNumber}: Farben tauschen">${SWAP_ICON}</button>
+      <input type="number" inputmode="numeric" min="0" max="99" name="games[${index}][score1]" aria-label="Spiel ${rowNumber}: Tore Team 1">
+      <span class="colon">:</span>
+      <input type="number" inputmode="numeric" min="0" max="99" name="games[${index}][score2]" aria-label="Spiel ${rowNumber}: Tore Team 2">
+      <button type="button" class="icon-btn remove-btn" title="Spiel entfernen" aria-label="Spiel ${rowNumber} entfernen">${MINUS_ICON}</button>
+      <input type="hidden" name="games[${index}][swapped]" value="${swapped ? 1 : 0}">`;
+    gamesEl.appendChild(row);
     updateRemovability();
-  } else {
-    button.dataset.confirmed = "true";
-    button.textContent = "🗑️";
-    setTimeout(() => {
-      button.dataset.confirmed = "false";
-      button.textContent = "−";
-    }, 2000);
+    if (focus) row.querySelector('input[type=number]').focus();
   }
-}
 
-function updateRemovability() {
-  const rows = document.querySelectorAll(".score-row");
-  rows.forEach((row, idx) => {
-    const removeBtn = row.querySelector(".remove-btn");
-    if (rows.length > 1) {
-      removeBtn.classList.remove("invisible");
-    } else {
-      removeBtn.classList.add("invisible");
-    }
-    removeBtn.dataset.confirmed = "false";
-    removeBtn.textContent = "−";
-  });
-}
-
-
-// Erste Spielzeile automatisch hinzufügen
-addGameRow();
-
-// --- Player selection placeholder + uniqueness handling ---
-function updateDisabledPlayers() {
-  const selects = Array.from(document.querySelectorAll('.player-select'));
-  const selected = selects.map(s => s.value).filter(v => v && v !== "");
-  selects.forEach(select => {
-    Array.from(select.options).forEach(opt => {
-      if (opt.value === "") {
-        opt.disabled = false;
-        return;
-      }
-      // disable if selected elsewhere (and not the current selection)
-      opt.disabled = selected.includes(opt.value) && select.value !== opt.value;
+  function updateRemovability() {
+    const rows = gamesEl.querySelectorAll('.score-row');
+    rows.forEach((row) => {
+      const btn = row.querySelector('.remove-btn');
+      btn.classList.toggle('invisible', rows.length <= 1);
+      btn.tabIndex = rows.length <= 1 ? -1 : 0;
+      disarm(btn);
     });
+  }
+
+  function disarm(btn) {
+    btn.classList.remove('armed', 'danger');
+    btn.innerHTML = MINUS_ICON;
+    clearTimeout(btn._timer);
+  }
+
+  gamesEl.addEventListener('click', (e) => {
+    const swapBtn = e.target.closest('.swap-btn');
+    if (swapBtn) {
+      const row = swapBtn.closest('.score-row');
+      row.classList.toggle('swapped');
+      const hidden = row.querySelector('input[type=hidden]');
+      hidden.value = hidden.value === '1' ? '0' : '1';
+      return;
+    }
+    const removeBtn = e.target.closest('.remove-btn');
+    if (removeBtn) {
+      const row = removeBtn.closest('.score-row');
+      const hasValues = Array.from(row.querySelectorAll('input[type=number]')).some((i) => i.value !== '');
+      // Leere Zeilen sofort entfernen, ausgefüllte erst nach zweitem Tippen
+      if (!hasValues || removeBtn.classList.contains('armed')) {
+        row.remove();
+        updateRemovability();
+      } else {
+        removeBtn.classList.add('armed', 'danger');
+        removeBtn.innerHTML = TRASH_ICON;
+        removeBtn._timer = setTimeout(() => disarm(removeBtn), 2500);
+      }
+    }
   });
-}
 
-function updateTeamLabels() {
-    const labelTeam1 = document.getElementById('label-team1');
-    const labelTeam2 = document.getElementById('label-team2');
+  document.getElementById('add-game').addEventListener('click', () => addGameRow(true));
 
-    const selectsTeam1 = [
-        document.querySelector('select[name="team1_player1"]'),
-        document.querySelector('select[name="team1_player2"]')
-    ];
-    const selectsTeam2 = [
-        document.querySelector('select[name="team2_player1"]'),
-        document.querySelector('select[name="team2_player2"]')
-    ];
+  // --- Spielerauswahl --------------------------------------------------------
+  function updateDisabledPlayers() {
+    const selected = selects.map((s) => s.value).filter(Boolean);
+    selects.forEach((s) => {
+      Array.from(s.options).forEach((opt) => {
+        opt.disabled = opt.value !== '' && selected.includes(opt.value) && s.value !== opt.value;
+      });
+    });
+  }
 
-    const team1Names = selectsTeam1
-        .map(s => s.options[s.selectedIndex].text)
-        .filter(name => name !== '(leer)');
+  function teamNames(n) {
+    return [sel(`team${n}_player1`), sel(`team${n}_player2`)]
+      .filter((s) => s.value)
+      .map((s) => s.options[s.selectedIndex].text);
+  }
 
-    const team2Names = selectsTeam2
-        .map(s => s.options[s.selectedIndex].text)
-        .filter(name => name !== '(leer)');
+  function updateTeamLabels() {
+    document.getElementById('label-team1').textContent = teamNames(1).join(' & ') || 'Team 1';
+    document.getElementById('label-team2').textContent = teamNames(2).join(' & ') || 'Team 2';
+  }
 
-    labelTeam1.textContent = team1Names.join(' & ') || 'Team 1';
-    labelTeam2.textContent = team2Names.join(' & ') || 'Team 2';
-}
-
-document.querySelectorAll('.player-select').forEach(s => {
-  // ensure placeholder is selected by default if nothing selected
-  if (!s.value) s.value = "";
-  s.addEventListener('change', () => {
+  selects.forEach((s) => s.addEventListener('change', () => {
     updateDisabledPlayers();
-    updateTeamLabels(); // Namen aktualisieren
+    updateTeamLabels();
+    hideError();
+  }));
+
+  // --- Absenden --------------------------------------------------------------
+  function showError(msg, focusEl) {
+    errorEl.textContent = msg;
+    errorEl.hidden = false;
+    if (focusEl) focusEl.focus();
+  }
+  function hideError() { errorEl.hidden = true; }
+
+  form.addEventListener('input', hideError);
+
+  form.addEventListener('submit', (e) => {
+    // Wenn nur Spieler 2 gewählt ist, nach oben rücken
+    for (const n of [1, 2]) {
+      const p1 = sel(`team${n}_player1`), p2 = sel(`team${n}_player2`);
+      if (!p1.value && p2.value) { p1.value = p2.value; p2.value = ''; }
+    }
+    updateDisabledPlayers();
+
+    if (!sel('team1_player1').value) { e.preventDefault(); return showError('Bitte für Team 1 mindestens einen Spieler auswählen.', sel('team1_player1')); }
+    if (!sel('team2_player1').value) { e.preventDefault(); return showError('Bitte für Team 2 mindestens einen Spieler auswählen.', sel('team2_player1')); }
+
+    const rows = Array.from(gamesEl.querySelectorAll('.score-row'));
+    for (const [i, row] of rows.entries()) {
+      const [a, b] = row.querySelectorAll('input[type=number]');
+      for (const input of [a, b]) {
+        const v = input.value.trim();
+        if (v === '' || !/^\d+$/.test(v) || Number(v) > 99) {
+          e.preventDefault();
+          return showError(`Bitte bei Spiel ${i + 1} beide Ergebnisse eintragen (0–99).`, input);
+        }
+      }
+      if (a.value === b.value && !confirm(`Spiel ${i + 1} endet unentschieden (${a.value}:${b.value}). Trotzdem speichern?`)) {
+        e.preventDefault();
+        return a.focus();
+      }
+    }
+
+    // Doppeltes Absenden verhindern
+    submitBtn.disabled = true;
+    submitBtn.setAttribute('aria-busy', 'true');
+    submitBtn.textContent = 'Speichere…';
   });
-});
 
-// Form submit handling: reorder players and validate teams
-document.querySelector('form[action="/submit"]').addEventListener('submit', function(e) {
-  // Reorder: if player1 is empty and player2 filled -> move up
-  const t1_p1 = this.querySelector('select[name="team1_player1"]');
-  const t1_p2 = this.querySelector('select[name="team1_player2"]');
-  const t2_p1 = this.querySelector('select[name="team2_player1"]');
-  const t2_p2 = this.querySelector('select[name="team2_player2"]');
+  // Nach "Zurück" im Browser wieder bedienbar machen
+  window.addEventListener('pageshow', () => {
+    submitBtn.disabled = false;
+    submitBtn.removeAttribute('aria-busy');
+    submitBtn.textContent = 'Spiele speichern';
+    updateDisabledPlayers();
+    updateTeamLabels();
+  });
 
-  if (t1_p1 && t1_p2 && !t1_p1.value && t1_p2.value) {
-    t1_p1.value = t1_p2.value;
-    t1_p2.value = "";
-  }
-  if (t2_p1 && t2_p2 && !t2_p1.value && t2_p2.value) {
-    t2_p1.value = t2_p2.value;
-    t2_p2.value = "";
-  }
-
-  // Update disabled options before validation
+  addGameRow(false);
   updateDisabledPlayers();
-
-  // Validate: each team must have at least one real player
-  if ((!t1_p1 || !t1_p1.value) && (!t1_p2 || !t1_p2.value)) {
-    e.preventDefault();
-    alert("Fehler: Team 1 muss mindestens einen Spieler haben.");
-    return false;
-  }
-  if ((!t2_p1 || !t2_p1.value) && (!t2_p2 || !t2_p2.value)) {
-    e.preventDefault();
-    alert("Fehler: Team 2 muss mindestens einen Spieler haben.");
-    return false;
-  }
-
-  // Before submit, ensure placeholder "(leer)" is not sent as literal.
-  // Since our placeholder uses empty value "", nothing special needed.
-  // Allow form to submit.
-  return true;
-});
-
-// Run once on load to set disabled state and labels
-updateDisabledPlayers();
-updateTeamLabels();
-
+  updateTeamLabels();
+})();

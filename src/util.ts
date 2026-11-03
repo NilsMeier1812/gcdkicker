@@ -66,3 +66,34 @@ export function formatDateTime(raw: string | null | undefined): string {
 export function signed(n: number): string {
   return n > 0 ? `+${n}` : `${n}`;
 }
+
+/** Kalendertag (YYYY-MM-DD) und Uhrzeit (HH:MM) in deutscher Zeit. */
+export function berlinParts(d: Date): { day: string; time: string } {
+  const parts = new Intl.DateTimeFormat("de-DE", {
+    timeZone: TZ,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hourCycle: "h23",
+  }).formatToParts(d);
+  const get = (t: string) => parts.find((p) => p.type === t)?.value ?? "";
+  return { day: `${get("year")}-${get("month")}-${get("day")}`, time: `${get("hour")}:${get("minute")}` };
+}
+
+/** Überschrift für einen Tag: "Heute", "Gestern" oder z. B. "Mo., 12.10.2026". */
+export function dayLabel(day: string, now = new Date()): string {
+  const today = berlinParts(now).day;
+  const yesterday = berlinParts(new Date(now.getTime() - 86_400_000)).day;
+  if (day === today) return "Heute";
+  if (day === yesterday) return "Gestern";
+  const [y, m, d] = day.split("-").map(Number);
+  return new Intl.DateTimeFormat("de-DE", {
+    timeZone: "UTC",
+    weekday: "short",
+    day: "2-digit",
+    month: "2-digit",
+    year: "numeric",
+  }).format(new Date(Date.UTC(y, m - 1, d, 12)));
+}

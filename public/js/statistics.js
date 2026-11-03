@@ -1,177 +1,143 @@
-const chartData = JSON.parse(document.getElementById('chart-data').textContent);
-const rawLabels = chartData.labels;
-const rawDates = chartData.dates;
-const rawDatasets = chartData.datasets;
+(() => {
+  const chartData = JSON.parse(document.getElementById('chart-data').textContent);
 
-function escapeHtml(str) {
-  return String(str).replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-}
+  const COLORS = [
+    '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6',
+    '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
+    '#808000', '#ffd8b1', '#5a7bd6', '#a9a9a9', '#1f77b4', '#ff7f0e', '#2ca02c', '#d62728',
+    '#9467bd', '#8c564b', '#e377c2', '#bcbd22', '#17becf', '#aec7e8', '#ffbb78', '#98df8a',
+  ];
+  const MIN_GAMES_VISIBLE = 5;
 
-// Große Farbpalette
-const extendedColors = [
-  '#e6194b', '#3cb44b', '#ffe119', '#4363d8', '#f58231', '#911eb4', '#46f0f0', '#f032e6',
-  '#bcf60c', '#fabebe', '#008080', '#e6beff', '#9a6324', '#fffac8', '#800000', '#aaffc3',
-  '#808000', '#ffd8b1', '#000075', '#808080', '#ffffff', '#000000', '#1f77b4', '#ff7f0e',
-  '#2ca02c', '#d62728', '#9467bd', '#8c564b', '#e377c2', '#7f7f7f', '#bcbd22', '#17becf',
-  '#aec7e8', '#ffbb78', '#98df8a', '#ff9896', '#c5b0d5', '#c49c94', '#f7b6d2', '#c7c7c7',
-  '#dbdb8d', '#9edae5', '#6b6ecf', '#b5cf6b', '#e7ba52', '#d6616b', '#ce6dbd', '#de9ed6'
-];
+  const escapeHtml = (str) => String(str).replace(/[&<>"']/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 
-// Status Variablen (stark vereinfacht, da Filter entfernt)
+  // --- Tabs (merkt sich die Auswahl in der URL, z. B. #verlauf) --------------
+  const tabs = { 'btn-elo': ['elo-view', 'ranking'], 'btn-table': ['table-view', 'details'], 'btn-chart': ['chart-view', 'verlauf'] };
+  let chartRendered = false;
 
-document.addEventListener('DOMContentLoaded', () => {
-    // --- 1. Tab Navigation ---
-    const views = {
-      'btn-elo': 'elo-view',
-      'btn-table': 'table-view',
-      'btn-chart': 'chart-view'
+  function selectTab(btnId, updateHash) {
+    for (const [id, [viewId]] of Object.entries(tabs)) {
+      const active = id === btnId;
+      document.getElementById(id).setAttribute('aria-selected', String(active));
+      document.getElementById(viewId).hidden = !active;
+    }
+    if (updateHash) history.replaceState(null, '', `#${tabs[btnId][1]}`);
+    if (btnId === 'btn-chart' && !chartRendered) renderChart();
+  }
+  for (const id of Object.keys(tabs)) {
+    document.getElementById(id).addEventListener('click', () => selectTab(id, true));
+  }
+  const fromHash = Object.entries(tabs).find(([, [, hash]]) => `#${hash}` === location.hash);
+  if (fromHash) selectTab(fromHash[0], false);
+
+  // --- Sortierbare Detailtabelle ----------------------------------------------
+  const table = document.getElementById('stats-table');
+  const headers = Array.from(table.querySelectorAll('th.sortable'));
+  const tbody = table.querySelector('tbody');
+
+  function sortBy(header, direction) {
+    const index = headers.indexOf(header);
+    const isString = header.dataset.sort === 'string';
+    headers.forEach((h) => h.removeAttribute('aria-sort'));
+    header.setAttribute('aria-sort', direction === 1 ? 'ascending' : 'descending');
+    const key = (row) => {
+      const cell = row.children[index];
+      return isString ? cell.textContent.trim() : parseFloat(cell.dataset.value);
     };
+    Array.from(tbody.rows)
+      .sort((a, b) => {
+        const av = key(a), bv = key(b);
+        const cmp = isString ? av.localeCompare(bv, 'de') : av - bv;
+        // Bei Gleichstand nach Name
+        return cmp * direction || a.children[0].textContent.localeCompare(b.children[0].textContent, 'de');
+      })
+      .forEach((row) => tbody.appendChild(row));
+  }
 
-    for (const [btnId, viewId] of Object.entries(views)) {
-        const btn = document.getElementById(btnId);
-        if(btn) {
-            btn.addEventListener('click', function() {
-                Object.keys(views).forEach(b => document.getElementById(b).classList.remove('active'));
-                Object.values(views).forEach(v => document.getElementById(v).classList.remove('active'));
-                this.classList.add('active');
-                document.getElementById(viewId).classList.add('active');
+  headers.forEach((header) => {
+    header.querySelector('button').addEventListener('click', () => {
+      const current = header.getAttribute('aria-sort');
+      // Zahlen zuerst absteigend, Namen zuerst aufsteigend
+      const first = header.dataset.sort === 'string' ? 1 : -1;
+      const direction = current === (first === 1 ? 'ascending' : 'descending') ? -first : first;
+      sortBy(header, direction);
+    });
+  });
+  const defaultHeader = headers.find((h) => h.dataset.default);
+  if (defaultHeader) sortBy(defaultHeader, -1);
 
-                if (btnId === 'btn-chart') {
-                     renderChart(); // Rendert/Updatet Chart
-                }
-            });
-        }
+  // --- Elo-Verlauf --------------------------------------------------------------
+  function renderChart() {
+    if (typeof ApexCharts === 'undefined') {
+      // Bibliothek noch nicht geladen (defer) -> kurz warten
+      return setTimeout(renderChart, 100);
     }
+    chartRendered = true;
+    const container = document.getElementById('chart-container');
+    const mobile = window.matchMedia('(max-width: 767px)').matches;
 
-    // --- 2. Table Sorting (Legacy) ---
-    const table = document.getElementById('stats-table');
-    if(table) {
-        const headers = table.querySelectorAll('th.sortable');
-        const tbody = table.querySelector('tbody');
-        headers.forEach((header, index) => {
-            header.addEventListener('click', () => {
-                const currentState = header.dataset.sortState;
-                let nextState = (currentState === 'desc') ? 'asc' : 'desc';
-                headers.forEach(h => { h.dataset.sortState = 'unsorted'; h.classList.remove('sorted-asc', 'sorted-desc'); });
-                header.dataset.sortState = nextState;
-                header.classList.add(nextState === 'asc' ? 'sorted-asc' : 'sorted-desc');
-                const direction = nextState === 'asc' ? 1 : -1;
-                const sortType = header.dataset.sort;
-                Array.from(tbody.querySelectorAll('tr')).sort((a, b) => {
-                    const aVal = a.children[index].textContent.trim();
-                    const bVal = b.children[index].textContent.trim();
-                    if (sortType === 'number') return (parseFloat(aVal.replace('%','')) - parseFloat(bVal.replace('%',''))) * direction;
-                    return aVal.localeCompare(bVal) * direction;
-                }).forEach(row => tbody.appendChild(row));
-            });
-        });
-        const defaultSort = Array.from(headers).find(h => h.textContent.includes('S'));
-        if(defaultSort) defaultSort.click();
-    }
+    const series = chartData.datasets.map((ds) => ({ name: ds.label, data: ds.data }));
+    const hidden = chartData.datasets.filter((ds) => ds.games < MIN_GAMES_VISIBLE).map((ds) => ds.label);
 
-    // --- 3. ApexCharts Logic ---
-    function renderChart() {
-        const chartContainer = document.querySelector("#chart-container");
-        chartContainer.innerHTML = ""; // Alten Chart zerstören
-
-        // 1. Daten vorbereiten (immer alle Spielgruppen im Category Mode)
-        const activeColors = [];
-        const series = [];
-
-        rawDatasets.forEach((ds, idx) => {
-            // Alle Spieler in die initialen Series aufnehmen
-            activeColors.push(extendedColors[idx % extendedColors.length]);
-
-            // Da wir immer den Category Mode nutzen: Einfaches Daten-Array der Werte
-            series.push({
-                name: ds.label,
-                data: ds.data // Das ist das komplette Array der Elo-Werte pro Spielgruppe
-            });
-        });
-
-        // 2. Chart Options
-        const options = {
-            series: series,
-            colors: activeColors,
-            chart: {
-                type: 'line',
-                height: 500,
-                background: 'transparent',
-                animations: { enabled: false },
-                fontFamily: 'inherit',
-                toolbar: { show: true, autoSelected: 'zoom' }
-            },
-            theme: { mode: 'dark' },
-            stroke: { curve: 'straight', width: 2 },
-            markers: { size: 0, hover: { size: 6 } },
-            yaxis: { title: { text: 'Elo' } },
-            grid: { borderColor: '#444' },
-
-            // Legende ist jetzt wieder sichtbar
-            legend: {
-                position: 'top',
-                horizontalAlign: 'left',
-                onItemClick: { toggleDataSeries: true },
-                onItemHover: { highlightDataSeries: true }
-            },
-
-            // X-Axis Konfiguration: Category (Spiele)
-            xaxis: {
-                type: 'category',
-                categories: rawLabels, // Datum-Strings als Labels ("27.11.")
-                title: { text: 'Spielgruppe' }, // Neuer X-Achsen Titel
-                tooltip: { enabled: false },
-                tickAmount: 20
-            },
-
-            // Tooltip Customization (Sortierung nach Elo)
-            tooltip: {
-                theme: 'dark',
-                shared: true,
-                intersect: false,
-                custom: function({series, seriesIndex, dataPointIndex, w}) {
-                    // Daten sammeln
-                    let data = [];
-                    w.globals.series.forEach((s, i) => {
-                        const val = s[dataPointIndex];
-                        if (val !== null && typeof val !== 'undefined') {
-                            data.push({
-                                name: w.globals.seriesNames[i],
-                                value: val,
-                                color: w.globals.colors[i]
-                            });
-                        }
-                    });
-
-                    // SORTIEREN (Höchster Elo oben)
-                    data.sort((a, b) => b.value - a.value);
-
-                    // Header (Datum der Spielgruppe)
-                    let headerTitle = w.globals.labels[dataPointIndex];
-
-                    let html = `<div class="apexcharts-tooltip-title">${escapeHtml(headerTitle || "Punkt")}</div>`;
-                    html += '<div style="max-height: 200px; overflow-y: auto;">';
-                    data.forEach(item => {
-                        html += `
-                        <div class="tooltip-item">
-                            <span class="tooltip-marker" style="background-color: ${item.color};"></span>
-                            <span class="tooltip-name">${escapeHtml(item.name)}:</span>
-                            <span class="tooltip-value">${item.value}</span>
-                        </div>`;
-                    });
-                    html += '</div>';
-                    return html;
-                }
-            }
-        };
-
-        window.myApexChart = new ApexCharts(chartContainer, options);
-        window.myApexChart.render();
-    }
-
-    // Initial rendern, falls der Tab aktiv ist
-    if(document.getElementById('chart-view').classList.contains('active')) {
-         renderChart();
-    }
-});
-
+    const chart = new ApexCharts(container, {
+      series,
+      colors: chartData.datasets.map((_, i) => COLORS[i % COLORS.length]),
+      chart: {
+        type: 'line',
+        height: mobile ? 440 : 500,
+        background: 'transparent',
+        animations: { enabled: false },
+        fontFamily: 'inherit',
+        foreColor: '#9aa6b2',
+        toolbar: { show: !mobile, tools: { download: false }, autoSelected: 'zoom' },
+        zoom: { enabled: true },
+      },
+      theme: { mode: 'dark' },
+      stroke: { curve: 'straight', width: 2 },
+      markers: { size: 0, hover: { size: 5 } },
+      grid: { borderColor: '#2a3742', padding: { left: 4, right: 8 } },
+      legend: {
+        position: 'bottom',
+        horizontalAlign: 'center',
+        fontSize: mobile ? '12px' : '13px',
+        itemMargin: { horizontal: 6, vertical: 3 },
+        markers: { size: 6 },
+        onItemClick: { toggleDataSeries: true },
+        onItemHover: { highlightDataSeries: !mobile },
+      },
+      yaxis: {
+        title: { text: mobile ? undefined : 'Elo' },
+        labels: { formatter: (v) => Math.round(v) },
+      },
+      xaxis: {
+        type: 'category',
+        categories: chartData.labels,
+        tickAmount: mobile ? 6 : 14,
+        labels: { rotate: 0, hideOverlappingLabels: true },
+        tooltip: { enabled: false },
+        axisTicks: { show: false },
+        axisBorder: { color: '#2a3742' },
+      },
+      tooltip: {
+        theme: 'dark',
+        shared: true,
+        intersect: false,
+        custom: ({ dataPointIndex, w }) => {
+          const items = [];
+          w.globals.series.forEach((s, i) => {
+            if (w.globals.collapsedSeriesIndices.includes(i)) return;
+            const val = s[dataPointIndex];
+            if (val !== null && val !== undefined) items.push({ name: w.globals.seriesNames[i], value: val, color: w.globals.colors[i] });
+          });
+          items.sort((a, b) => b.value - a.value);
+          const title = w.globals.categoryLabels[dataPointIndex] || w.globals.labels[dataPointIndex] || '';
+          return `<div class="apexcharts-tooltip-title">${escapeHtml(title)}</div>` +
+            '<div style="max-height: 220px; overflow-y: auto;">' +
+            items.map((it) => `<div class="tooltip-item"><span class="tooltip-marker" style="background-color:${it.color}"></span><span class="tooltip-name">${escapeHtml(it.name)}</span><span class="tooltip-value">${it.value}</span></div>`).join('') +
+            '</div>';
+        },
+      },
+    });
+    chart.render().then(() => hidden.forEach((name) => chart.hideSeries(name)));
+  }
+})();

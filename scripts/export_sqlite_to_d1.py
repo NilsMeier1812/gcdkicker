@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Exportiert die Daten aus der alten SQLite-Datenbank (kicker.db von PythonAnywhere)
-in eine SQL-Datei, die mit `wrangler d1 execute` in Cloudflare D1 importiert werden kann.
+Erzeugt aus der alten SQLite-Datenbank (kicker.db von PythonAnywhere) die Datei
+src/migrations/0002_seed.sql. Der Worker spielt sie beim ersten Start einmalig in D1 ein.
 
-Das Schema wird NICHT exportiert – das legen die Migrationen in ./migrations an.
+Das Schema wird NICHT exportiert – das steht in src/migrations/0001_schema.sql.
 
 Benutzung:
-    python3 scripts/export_sqlite_to_d1.py pfad/zu/kicker.db data.sql
+    python3 scripts/export_sqlite_to_d1.py data/kicker.db src/migrations/0002_seed.sql
 """
 import sqlite3
 import sys
@@ -47,9 +47,7 @@ def main():
     game_ids = {r[0] for r in conn.execute("SELECT id FROM games")}
 
     with open(dst, "w", encoding="utf-8") as out:
-        out.write("-- Datenimport aus kicker.db\n")
-        out.write("DELETE FROM games_history;\nDELETE FROM elo_history;\nDELETE FROM game_players;\n")
-        out.write("DELETE FROM games;\nDELETE FROM players;\n\n")
+        out.write("-- Datenimport aus kicker.db (automatisch erzeugt von scripts/export_sqlite_to_d1.py)\n")
 
         for table, cols in TABLES.items():
             if table not in existing:

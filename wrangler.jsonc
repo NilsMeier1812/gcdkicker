@@ -9,10 +9,10 @@
   "d1_databases": [
     {
       "binding": "DB",
-      "database_name": "kicker-db",
-      // Nach `npx wrangler d1 create kicker-db` die ausgegebene ID hier eintragen:
-      "database_id": "00000000-0000-0000-0000-000000000000",
-      "migrations_dir": "migrations"
+      // Keine database_id nötig: Cloudflare legt die Datenbank "kicker-db" beim ersten
+      // Deploy automatisch an (bzw. verwendet eine bestehende mit diesem Namen).
+      // Tabellen und Daten richtet der Worker selbst ein (siehe src/migrate.ts).
+      "database_name": "kicker-db"
     }
   ]
 }

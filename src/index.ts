@@ -1,5 +1,6 @@
 import { Hono } from "hono";
 import { STARTING_ELO, recalculateAllElo } from "./elo";
+import { ensureMigrated } from "./migrate";
 import { type Env, formatDateTime, formatDayMonth, nowTimestamp, parseTimestamp, pyRound } from "./util";
 import {
   type AdminGame,
@@ -18,6 +19,12 @@ import {
 } from "./views/pages";
 
 const app = new Hono<{ Bindings: Env }>();
+
+// Datenbank beim ersten Request automatisch einrichten (Schema + Daten-Import)
+app.use("*", async (c, next) => {
+  await ensureMigrated(c.env.DB);
+  await next();
+});
 
 // ---------------------------------------------------------------------------
 // Web-UI Routen

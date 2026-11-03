@@ -1,0 +1,87 @@
+.centered {
+  text-align: center;
+  margin-top: 0.5rem;
+}
+.score-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: linear-gradient(to right, #d9534f, black, #0275d8); /* Standard: Rot → Blau */
+  padding: 0.5rem 1rem;
+  border-radius: 0.75rem;
+  margin-bottom: 1rem;
+  gap: 0.5rem;
+  transition: background 0.3s ease;
+}
+.score-row.swapped {
+  background: linear-gradient(to right, #0275d8, black, #d9534f); /* Blau → Rot */
+}
+.score-row > * {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.25rem;
+}
+.swap-btn,
+.remove-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  height: 2.25rem;
+  width: 2.25rem;
+  aspect-ratio: 1 / 1;
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+  background-color: var(--secondary);
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  box-sizing: border-box;
+  vertical-align: middle;
+  position: relative;
+  transform: translateY(9px);
+}
+.swap-btn:hover,
+.remove-btn:hover {
+  background-color: var(--primary-hover);
+}
+.remove-btn.invisible {
+  visibility: hidden;
+}
+input[type="number"] {
+  min-width: 0;
+  text-align: center;
+  height: 2.25rem;
+  line-height: 1.2;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  margin: 0;
+  font-size: 1rem;
+  box-sizing: border-box;
+}
+.score-row span.separator {
+  flex: 0 0 0%;
+  text-align: center;
+  font-weight: bold;
+  display: flex;
+  height: 2.25rem;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.2;
+}
+.score-header {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+  text-align: center;
+  margin: 0.5rem 0;
+  font-weight: bold;
+}
+.team-label {
+  font-size: 1.2rem;
+  min-height: 2rem;
+}
+

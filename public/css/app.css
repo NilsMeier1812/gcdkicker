@@ -73,6 +73,7 @@ h1 { font-size: 1.6rem; margin: 0; }
   display: flex;
   align-items: center;
   gap: 0.4rem;
+  margin: 0; /* Pico setzt bei Links in <nav> negative Abstände -> Überlappung */
   padding: 0.45rem 0.85rem;
   border-radius: 999px;
   color: var(--muted-color);
@@ -142,6 +143,7 @@ h1 { font-size: 1.6rem; margin: 0; }
 
 /* ---------- Eintragen ---------- */
 .teams { display: grid; grid-template-columns: 1fr 1fr; gap: 0.75rem; }
+@media (max-width: 767px) { .teams { grid-template-columns: 1fr; } }
 .team-box {
   margin: 0;
   padding: 0.75rem;
@@ -152,11 +154,6 @@ h1 { font-size: 1.6rem; margin: 0; }
 .team-box legend { padding: 0 0.35rem; font-weight: 700; font-size: 0.9rem; }
 .team-box select { margin-bottom: 0.5rem; padding-left: 0.75rem; font-size: 0.95rem; }
 .team-box select:last-child { margin-bottom: 0; }
-@media (max-width: 480px) {
-  .teams { gap: 0.5rem; }
-  .team-box { padding: 0.5rem; }
-  .team-box select { font-size: 0.9rem; padding-right: 2rem; background-position: center right 0.5rem; }
-}
 
 .games-box { margin: 1.25rem 0 1rem; }
 .score-grid {
@@ -262,7 +259,6 @@ h1 { font-size: 1.6rem; margin: 0; }
 .dot { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
 .dot.red { background: var(--red); }
 .dot.blue { background: var(--blue); }
-.game-time { font-size: 0.75rem; color: var(--muted-color); margin-top: 0.15rem; }
 @media (min-width: 768px) {
   .game-card { padding: 1rem 1.5rem; gap: 1.5rem; }
   .side { flex-direction: row; align-items: center; justify-content: space-between; gap: 1rem; }

@@ -27,12 +27,6 @@ const NAV = [
   { href: "/statistics", label: "Statistik", icon: "chart" },
 ];
 
-const FAVICON =
-  "data:image/svg+xml," +
-  encodeURIComponent(
-    '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100"><text y=".9em" font-size="90">⚽</text></svg>'
-  );
-
 export function layout({ title, path, head = "", content, scripts = "" }: LayoutOptions): string {
   const nav = NAV.map(
     (n) =>
@@ -45,16 +39,16 @@ export function layout({ title, path, head = "", content, scripts = "" }: Layout
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
   <meta name="theme-color" content="#11191f" />
-  <title>${esc(title)} · Kicker</title>
-  <link rel="icon" href="${FAVICON}" />
+  <title>${esc(title)} · GCD Kicker</title>
+  <link rel="icon" href="data:," />
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@picocss/pico@1.5.13/css/pico.min.css" />
-  <link rel="stylesheet" href="/css/app.css?v=2" />
+  <link rel="stylesheet" href="/css/app.css?v=3" />
   ${head}
 </head>
 <body>
   <header class="app-header">
     <div class="container app-header-inner">
-      <a href="/" class="brand">⚽ Kicker</a>
+      <a href="/" class="brand">GCD Kicker</a>
       <nav class="app-nav" aria-label="Hauptnavigation">
       ${nav}
       </nav>

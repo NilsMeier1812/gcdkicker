@@ -21,7 +21,7 @@ export function indexPage(players: Player[]): string {
   const team = (n: 1 | 2) => `
       <fieldset class="team-box">
         <legend>Team ${n}</legend>
-        ${playerSelect(`team${n}_player1`, `Team ${n}, Spieler 1`, "Spieler wählen", players)}
+        ${playerSelect(`team${n}_player1`, `Team ${n}, Spieler 1`, "1. Spieler", players)}
         ${playerSelect(`team${n}_player2`, `Team ${n}, Spieler 2`, "2. Spieler", players)}
       </fieldset>`;
 
@@ -158,8 +158,6 @@ function gameCard(group: OverviewGame[], highlight: boolean): string {
   const names = (team: TeamMember[], won: boolean) =>
     `<div class="team-names${won ? " winner" : ""}">${team.map((p) => `<span>${esc(p.name)}</span>`).join("")}</div>`;
   const groupId = first.group_id || `single_${first.id}`;
-  const d = parseTimestamp(first.time_played);
-  const time = d ? berlinParts(d).time : "";
 
   return `
     <article class="game-card${highlight ? " is-new" : ""}" data-group-id="${esc(groupId)}" tabindex="-1">
@@ -169,7 +167,6 @@ function gameCard(group: OverviewGame[], highlight: boolean): string {
       </div>
       <div class="scores">
         ${scoreLines}
-        <span class="game-time">${time}</span>
       </div>
       <div class="side right">
         ${names(rightTeam, rightWins > leftWins)}

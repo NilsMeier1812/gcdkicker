@@ -1,0 +1,18 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "gcdkicker",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-10-01",
+  "observability": { "enabled": true },
+  // Statische Dateien (CSS/JS) aus ./public
+  "assets": { "directory": "./public" },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      // Keine database_id nötig: Cloudflare legt die Datenbank "kicker-db" beim ersten
+      // Deploy automatisch an (bzw. verwendet eine bestehende mit diesem Namen).
+      // Tabellen und Daten richtet der Worker selbst ein (siehe src/migrate.ts).
+      "database_name": "kicker-db"
+    }
+  ]
+}

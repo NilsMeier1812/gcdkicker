@@ -1,0 +1,8 @@
+node_modules/
+.wrangler/
+.dev.vars
+*.db
+!data/kicker.db
+*.db-*
+data.sql
+__pycache__/

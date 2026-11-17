@@ -1,5 +1,6 @@
 import schemaSql from "./migrations/0001_schema.sql";
 import seedSql from "./migrations/0002_seed.sql";
+import nachtrag202611Sql from "./migrations/0003_nachtrag_2026_11.sql";
 import { recalculateAllElo } from "./elo";
 
 /**
@@ -12,6 +13,7 @@ import { recalculateAllElo } from "./elo";
 const MIGRATIONS: Array<{ name: string; sql: string; recalcElo?: boolean }> = [
   { name: "0001_schema", sql: schemaSql },
   { name: "0002_seed", sql: seedSql, recalcElo: true },
+  { name: "0003_nachtrag_2026_11", sql: nachtrag202611Sql, recalcElo: true },
 ];
 
 /** Zerlegt eine SQL-Datei in einzelne Statements (eins pro ";" am Zeilenende). */
